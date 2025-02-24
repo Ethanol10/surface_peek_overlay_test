@@ -14,11 +14,21 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Transparent"
+        android:theme="@style/PeekModeOverlay"
         android:directBootAware="true"
         android:process="com.ethanol10.surfaceduooverlay"
-        tools:targetApi="35">
-        <activity android:name=".OverlayActivity"/>
+        tools:targetApi="35"
+        android:showOnLockScreen="true"
+        android:showForAllUsers="true">
+        <activity android:name=".OverlayActivity"
+            android:exported="true"
+            android:showOnLockScreen="true"
+            android:showForAllUsers="true">
+            <intent-filter>
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".SurfaceDuoOverlayService"
@@ -30,6 +40,7 @@
         </service>
 
         <activity android:name=".shit"
+            android:showOnLockScreen="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
