@@ -1,14 +1,16 @@
 package com.ethanol10.surfaceduooverlay
 
-import android.content.Intent
+import android.app.Activity
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 
-public class MainActivity : Application() {
-    override fun onCreate() {
-        super.onCreate()
+public class shit : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
         if (!Settings.canDrawOverlays(this)) {
             val intent2 = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
@@ -23,8 +25,8 @@ public class MainActivity : Application() {
         startService(intent)
     }
 
-    override fun onTerminate() {
-        super.onTerminate()
+    override fun onDestroy() {
+        super.onDestroy()
 
         val intent = Intent(this, SurfaceDuoOverlayService::class.java)
 
