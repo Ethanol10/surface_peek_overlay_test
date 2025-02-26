@@ -1,5 +1,6 @@
 package com.ethanol10.surfaceduooverlay
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -30,7 +31,7 @@ import java.util.Date
 import java.util.Locale
 
 
-class OverlayActivity : ComponentActivity() {
+class OverlayActivity : Activity() {
     private var batteryReceiver: BatteryReceiver? = null
     private var windowManager: WindowManager? = null
     private var textView: TextView? = null
@@ -47,7 +48,6 @@ class OverlayActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         this.setShowWhenLocked(true)
         this.setTurnScreenOn(true)
 
@@ -176,7 +176,7 @@ class OverlayActivity : ComponentActivity() {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY ,
+            WindowManager.LayoutParams.TYPE_SYSTEM_ERROR,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
