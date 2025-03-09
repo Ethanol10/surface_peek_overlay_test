@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Resources
 import android.graphics.PixelFormat
 import android.os.BatteryManager
 import android.os.Bundle
@@ -11,16 +12,18 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.text.format.DateFormat
+import android.util.DisplayMetrics
 import android.util.Log
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.Animation
 import android.view.animation.ScaleAnimation
 import android.widget.TextView
-import androidx.activity.ComponentActivity
-import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.ethanol10.surfaceduooverlay.SurfaceDuoOverlayService.BatteryReceiver
@@ -44,6 +47,16 @@ class OverlayActivity : Activity() {
     private var fadeHandler: Handler? = null
     private var fadeRunnable: Runnable? = null
     private var sleepAfterShowingOverlay = false
+
+    enum class HingePosition {
+        CENTER,
+        TOP,
+        BOTTOM
+    }
+
+    private var selectedHingePosition: HingePosition = HingePosition.TOP
+
+    private var show24HourTime: Boolean = true
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,7 +91,10 @@ class OverlayActivity : Activity() {
     }
 
     fun getDisplayText(): String {
-        val formatter = SimpleDateFormat("KK:mm a", Locale.getDefault())
+        var formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+        if(!DateFormat.is24HourFormat(this)){
+            formatter = SimpleDateFormat("KK:mm a", Locale.getDefault())
+        }
         val formattedTime = formatter.format(Date())
         return "${formattedTime}"
     }
@@ -130,6 +146,9 @@ class OverlayActivity : Activity() {
         hideOverlay(false)
         val displayText = getDisplayText()
         val dateText = getDateText()
+        val hingeGapDisabled = false
+        var hingeClockMargins = 40f
+        var hingeClocKVerticalMargin = 625f;
 
         // Inflate the overlay view
         postureOverlay = LayoutInflater.from(this).inflate(R.layout.overlay, null)
@@ -149,13 +168,17 @@ class OverlayActivity : Activity() {
 
         var heightToAnimateTo: Float = heightvar * (50f / 100f) * 2f
 
-        Log.d("ETHANOL10", heightvar.toString())
-        Log.d("ETHANOL10", (getBatteryPercentage(this) / 100f).toString())
-        Log.d("ETHANOL10", heightToAnimateTo.toString())
-
-//        battery_background?.animate()?.scaleY(heightToAnimateTo)?.setInterpolator(AccelerateDecelerateInterpolator())?.setDuration(2000);
+//        Log.d("ETHANOL10", heightvar.toString())
+//        Log.d("ETHANOL10", (getBatteryPercentage(this) / 100f).toString())
+//        Log.d("ETHANOL10", heightToAnimateTo.toString())
 
         scaleView(battery_background!!, 0f, getBatteryPercentage(this) / 100f)
+
+
+        if(hingeGapDisabled)
+        {
+            hingeClockMargins = 15f
+        }
 
         if (left_clock != null && right_clock != null && left_battery != null && right_battery != null && right_hinge_clock != null && left_hinge_clock != null) {
             left_clock.text = displayText
@@ -164,6 +187,42 @@ class OverlayActivity : Activity() {
             right_hinge_clock.text = """${displayText} | ${getBatteryEmoji(this)}${getBatteryPercentage(this)}%"""
             left_battery.text = """${dateText} | ${getBatteryEmoji(this)}${getBatteryPercentage(this)}%"""
             right_battery.text = """${dateText} | ${getBatteryEmoji(this)}${getBatteryPercentage(this)}%"""
+
+            val px = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                hingeClockMargins,
+                Resources.getSystem().displayMetrics
+            ).toInt()
+
+            val verticalPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                hingeClocKVerticalMargin,
+                Resources.getSystem().displayMetrics
+            ).toInt()
+
+            var leftHingeClockParams = left_hinge_clock.layoutParams as ViewGroup.MarginLayoutParams
+            var rightHingeClockParams = right_hinge_clock.layoutParams as ViewGroup.MarginLayoutParams
+
+//            leftHingeClockParams.marginEnd = px
+//            rightHingeClockParams.marginStart = px
+
+            when(selectedHingePosition){
+                HingePosition.TOP -> {
+                    leftHingeClockParams.setMargins(0, 0, px, verticalPx)
+                    rightHingeClockParams.setMargins(px, 0, 0, verticalPx)
+                }
+                HingePosition.BOTTOM -> {
+                    leftHingeClockParams.setMargins(0, verticalPx, px, 0)
+                    rightHingeClockParams.setMargins(px, verticalPx, 0, 0)
+                }
+                HingePosition.CENTER -> {
+                    leftHingeClockParams.setMargins(0, 0, px, 0)
+                    rightHingeClockParams.setMargins(px, 0, 0, 0)
+                }
+            }
+            left_hinge_clock.layoutParams = leftHingeClockParams
+            right_hinge_clock.layoutParams = rightHingeClockParams
+
         }
         if(parent_view != null){
             //Animate from 0 alpha
