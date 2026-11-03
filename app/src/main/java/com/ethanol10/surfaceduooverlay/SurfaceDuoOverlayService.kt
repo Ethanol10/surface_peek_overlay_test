@@ -1,6 +1,5 @@
 package com.ethanol10.surfaceduooverlay
 
-import android.R.attr.value
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -37,7 +36,7 @@ class SurfaceDuoOverlayService: Service() {
 
     private fun createPostureOverlay() {
         val inflater = LayoutInflater.from(applicationContext)
-        postureOverlay = inflater.inflate(R.layout.overlay, null)
+        postureOverlay = inflater.inflate(R.layout.peek_mode, null)
     }
 
     override fun onCreate() {
@@ -114,7 +113,7 @@ class SurfaceDuoOverlayService: Service() {
     fun StartOverlayActivity(sleepOnAction: Boolean){
         val myIntent: Intent = Intent(
             this,
-            OverlayActivity::class.java
+            PeekController::class.java
         )
         myIntent.putExtra("sleepOnAction", sleepOnAction)
         myIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
