@@ -29,6 +29,14 @@ import android.widget.TextView
 data class PeekNotification(val key: String, val icon: Drawable, val count: Int = 1)
 
 /**
+ * Battery state shown on every battery box.
+ *
+ * @param charging actively charging: drives the moving wave and the gradient pulse
+ * @param pluggedIn on a charger (including full): drives the bolt icon
+ */
+data class BatteryState(val percent: Int, val charging: Boolean, val pluggedIn: Boolean)
+
+/**
  * Where notification data comes from.
  * Prototype: a fake. AOSP: back this with the active-notifications state
  * SystemUI already exposes (group by package to get one entry + count per app).
@@ -41,6 +49,9 @@ interface PeekNotificationSource {
 
 /**
  * Owns the Peek Mode window and its state.
+ *
+ * The whole overlay fades in when [show] is called and fades out when [hide] is called; the
+ * window is only removed once the fade-out finishes.
  *
  * The layout has two identical outer-edge panels plus a strip along the hinge on each screen
  * (rotated 90 degrees: anticlockwise on the left screen, clockwise on the right). Each strip
@@ -74,13 +85,30 @@ class PeekController(
          * rotation, change this one constant (e.g. SCREEN_ORIENTATION_REVERSE_LANDSCAPE).
          */
         const val FORCED_ORIENTATION = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+
+        /** Fade of the whole overlay when it becomes active / is deactivated. */
+        const val FADE_IN_MS = 300L
+        const val FADE_OUT_MS = 300L
     }
 
     private var peekView: View? = null
+
+    /** True between [show] and [hide]. The window can outlive this briefly while it fades out. */
+    private var visible = false
+
     private val handler = Handler(Looper.getMainLooper())
     private val autoHide = Runnable { hide() }
 
-    val isShowing: Boolean get() = peekView != null
+    val isShowing: Boolean get() = visible
+
+    private var realBattery: BatteryState? = null
+    private var batteryOverride: BatteryState? = null
+
+    /** Test hook: show this battery state instead of the real one. Pass null to use the real one. */
+    fun setBatteryOverride(state: BatteryState?) {
+        batteryOverride = state
+        applyBattery()
+    }
 
     private val notifListener: (List<PeekNotification>) -> Unit = { bindNotifications(it) }
 
@@ -88,37 +116,67 @@ class PeekController(
         override fun onReceive(c: Context, intent: Intent) = bindBattery(intent)
     }
 
-    /** @param timeoutMs auto-hide delay, or null to stay until [hide] is called. */
+    /**
+     * Fades the overlay in. Calling it while it is fading out brings it back.
+     * @param timeoutMs auto-hide delay, or null to stay until [hide] is called.
+     */
     fun show(timeoutMs: Long? = null) {
-        if (peekView == null) {
-            val view = LayoutInflater.from(context).inflate(R.layout.peek_mode, null)
-            view.findViewById<View>(R.id.peek_hinge_gap).layoutParams.width = hingeWidthPx
-            peekView = view
-
-            // Outer panels: battery background rounded on all corners (strips keep top-only).
-            panels().forEach {
-                it.findViewById<BatteryBoxView>(R.id.peek_panel_battery).setRoundAllCorners(true)
-            }
-
-            windowManager.addView(view, layoutParams())
+        val view = peekView ?: createWindow()
+        if (!visible) {
+            visible = true
 
             // registerReceiver returns the last sticky battery broadcast: use it for first paint.
-            context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-                ?.let { bindBattery(it) }
+            val sticky = context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            if (sticky != null) bindBattery(sticky) else applyBattery()
             notifications.addListener(notifListener)
             bindNotifications(notifications.current())
+
+            view.animate().cancel() // also cancels a pending fade-out removal
+            view.animate().alpha(1f).setDuration(FADE_IN_MS).start()
         }
         handler.removeCallbacks(autoHide)
         timeoutMs?.let { handler.postDelayed(autoHide, it) }
     }
 
+    /** Fades the overlay out, then removes its window. */
     fun hide() {
         handler.removeCallbacks(autoHide)
         val view = peekView ?: return
+        if (!visible) return
+        visible = false
+
+        // Stop live updates now; the view just stays up while it fades.
         notifications.removeListener(notifListener)
         runCatching { context.unregisterReceiver(batteryReceiver) }
-        windowManager.removeView(view)
-        peekView = null
+
+        view.animate().cancel()
+        // withEndAction only runs if the fade finishes; show() cancels it to bring the overlay back.
+        view.animate().alpha(0f).setDuration(FADE_OUT_MS).withEndAction {
+            view.visibility = View.INVISIBLE
+            removeWindow(view)
+        }.start()
+    }
+
+    private fun createWindow(): View {
+        val view = LayoutInflater.from(context).inflate(R.layout.peek_mode, null)
+        view.findViewById<View>(R.id.peek_hinge_gap).layoutParams.width = hingeWidthPx
+        view.alpha = 0f // faded in by show()
+        peekView = view
+
+        // Outer panels: battery background rounded on all corners (strips keep top-only).
+        panels().forEach {
+            it.findViewById<BatteryBoxView>(R.id.peek_panel_battery).setRoundAllCorners(true)
+        }
+
+        windowManager.addView(view, layoutParams())
+        return view
+    }
+
+    private fun removeWindow(view: View) {
+        if (peekView === view && !visible) {
+            runCatching { windowManager.removeView(view) }
+            peekView = null
+        }
     }
 
     /** The two cloned outer panels. Child ids repeat inside each, so look them up per panel. */
@@ -139,17 +197,26 @@ class PeekController(
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING // drives the pulse
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING // drives the wave + pulse
         val pluggedIn = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0 // drives the bolt icon
         val pct = if (level >= 0 && scale > 0) level * 100 / scale else 0
 
+        realBattery = BatteryState(pct, charging, pluggedIn)
+        applyBattery()
+    }
+
+    /** Pushes the current battery state (the test override if set, else the real one) into every box. */
+    private fun applyBattery() {
+        val state = batteryOverride ?: realBattery ?: return
         // Every battery box (outer panels + hinge strips) is the same view: percent, icon,
-        // level fill animating up from 0, and the pulse while charging.
+        // level-colored fill animating up from 0, and the wave + gradient pulse while charging.
         panels().forEach {
-            it.findViewById<BatteryBoxView>(R.id.peek_panel_battery).setLevel(pct, charging, pluggedIn)
+            it.findViewById<BatteryBoxView>(R.id.peek_panel_battery)
+                .setLevel(state.percent, state.charging, state.pluggedIn)
         }
         strips().forEach {
-            it.findViewById<BatteryBoxView>(R.id.peek_strip_battery).setLevel(pct, charging, pluggedIn)
+            it.findViewById<BatteryBoxView>(R.id.peek_strip_battery)
+                .setLevel(state.percent, state.charging, state.pluggedIn)
         }
     }
 
@@ -165,8 +232,8 @@ class PeekController(
         }
 
         // Types that get their own slot, and how many TYPES spill into the ellipsis slot.
-        val visible = list.take(maxVisible)
-        val hiddenTypes = list.size - visible.size
+        val visibleTypes = list.take(maxVisible)
+        val hiddenTypes = list.size - visibleTypes.size
 
         // A Drawable instance shouldn't be shared between views, so every view gets its own copy.
         fun ownIcon(n: PeekNotification): Drawable =
@@ -190,7 +257,7 @@ class PeekController(
             }
 
             grid.removeAllViews()
-            visible.forEach { addIcon(ownIcon(it)) }
+            visibleTypes.forEach { addIcon(ownIcon(it)) }
             if (hiddenTypes > 0) addIcon(moreIcon())
 
             countText.text = countLabel
@@ -218,7 +285,7 @@ class PeekController(
             }
 
             row.removeAllViews()
-            visible.forEach { n ->
+            visibleTypes.forEach { n ->
                 addBox(ownIcon(n), if (n.count > 1) n.count.toString() else null)
             }
             if (hiddenTypes > 0) addBox(moreIcon(), hiddenTypes.toString())
@@ -236,7 +303,9 @@ class PeekController(
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-        PixelFormat.OPAQUE
+        // Translucent (not OPAQUE) so fading the root view's alpha reveals what's underneath
+        // instead of fading black into black. The content itself is still opaque black at alpha 1.
+        PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.TOP or Gravity.START
         layoutInDisplayCutoutMode =
@@ -245,4 +314,3 @@ class PeekController(
         screenOrientation = FORCED_ORIENTATION
     }
 }
- 

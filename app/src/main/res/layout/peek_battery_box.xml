@@ -8,7 +8,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="20dp"
-    android:minWidth="96dp"
+    android:minWidth="80dp"
     android:paddingHorizontal="10dp">
 
     <LinearLayout
@@ -31,6 +31,7 @@
             android:layout_marginStart="3dp"
             android:textColor="#FFFFFF"
             android:textSize="15sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:text="80%"/>
     </LinearLayout>
 </com.ethanol10.surfaceduooverlay.BatteryBoxView>
