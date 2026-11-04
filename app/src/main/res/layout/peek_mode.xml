@@ -18,6 +18,8 @@
     android:orientation="horizontal">
 
     <!-- LEFT SCREEN -->
+
+    <!-- HINGE GAP: 66 px preview default; PeekController sets the real value at runtime -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
@@ -51,7 +53,6 @@
         </com.ethanol10.surfaceduooverlay.RotatedLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- HINGE GAP: 66 px preview default; PeekController sets the real value at runtime -->
     <View
         android:id="@+id/peek_hinge_gap"
         android:layout_width="66px"

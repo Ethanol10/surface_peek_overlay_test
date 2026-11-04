@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity() {
         private var items = emptyList<PeekNotification>()
 
         fun setCount(n: Int) {
-            items = List(n) { PeekNotification("fake-$it", icon()) }
+            items = List(n) { PeekNotification("fake-$it", icon(), count = it + 1) }
             listeners.toList().forEach { it(items) }
         }
 
@@ -68,9 +68,11 @@ class MainActivity : AppCompatActivity() {
             addView(button("Show peek (5 s)") { ensureOverlayPermission { controller.show(5_000) } })
             addView(button("Show peek (stay)") { ensureOverlayPermission { controller.show() } })
             addView(button("Hide peek") { controller.hide() })
-            addView(button("0 notifications") { source.setCount(0) })
-            addView(button("3 notifications") { source.setCount(3) })
-            addView(button("9 notifications") { source.setCount(9) })
+            // N boxes; box i shows the number i (1..N), so you can see per-box counts
+            addView(button("0 boxes") { source.setCount(0) })
+            addView(button("3 boxes") { source.setCount(3) })
+            addView(button("6 boxes") { source.setCount(6) })
+            addView(button("9 boxes") { source.setCount(9) })
         })
     }
 
